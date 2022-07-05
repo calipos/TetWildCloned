@@ -100,7 +100,7 @@ void SimpleTetrahedralization::triangulation(std::vector<TetVertex>& tet_vertice
         }
         assert(poly.is_simple());
 
-        Arrangement_2 arr;
+        Arrangement_2 arr;  //arr 首先存储一个bsp face 的2d 线段，然后如果遇到target的一个面的边（2d投影），跨过了bsp face 的2d 线段，就把这对2d点insert到arr
         std::vector<Segment_arr_2> arr_segs;
         for (int j = 0; j < poly.size(); j++)
             arr_segs.push_back(Segment_arr_2(poly[j], poly[(j + 1) % poly.size()]));
@@ -125,14 +125,17 @@ void SimpleTetrahedralization::triangulation(std::vector<TetVertex>& tet_vertice
         }
         CGAL::insert(arr, arr_segs.begin(), arr_segs.end());
 
-        std::map<Point_2, int> vs_arr2bsp;
+        std::map<Point_2, int> vs_arr2bsp;//将arr 的2d点和bsp的点对应起来
         std::vector<std::vector<int>> new_v_ids(bsp_faces[i].edges.size(), std::vector<int>());
-        std::vector<Segment_3> segs(bsp_faces[i].edges.size(), Segment_3());
+        std::vector<Segment_3> segs(bsp_faces[i].edges.size(), Segment_3());//segs 存储一个bsp face 的edge
         for (int j = 0; j < bsp_faces[i].edges.size(); j++) {
             segs[j] = Segment_3(bsp_vertices[bsp_edges[bsp_faces[i].edges[j]].vertices[0]],
                                 bsp_vertices[bsp_edges[bsp_faces[i].edges[j]].vertices[1]]);
         }
         for (auto it = arr.vertices_begin(); it != arr.vertices_end(); it++) {
+            //arr 里面是一对2d点，既有bsp face 的vertex  也有诸如跨线的target face edge的端点，
+            //如果有个跨线的点在bsp face 的polygon2d之外  则map=-1
+            //如果有个点属于bsp face 的polygon的顶点，则map=bsp的vertex id
             if (poly.has_on_unbounded_side(it->point())) {//判断是否在 bsp face围城的polygon外
                 vs_arr2bsp[it->point()] = -1;
                 continue;
@@ -143,6 +146,9 @@ void SimpleTetrahedralization::triangulation(std::vector<TetVertex>& tet_vertice
                 vs_arr2bsp[it->point()] = bsp_faces[i].vertices[n];
                 continue;
             }
+            //既不在polygon2d之外  也不再polygon2d的顶点，
+            //1要么在polygon2d的边上，在边上的点会被push到bsp的vertex队列中
+            //2要么在polygon2d的内部，在内部的点会被push到bsp的vertex队列中，也会加入new_v_ids
             Point_3 p = MC.to3d(it->point(), pln);
             int on_e_local_id = -1;
             for (int j = 0; j < bsp_faces[i].edges.size(); j++) {
@@ -164,7 +170,7 @@ void SimpleTetrahedralization::triangulation(std::vector<TetVertex>& tet_vertice
             bsp_faces[i].vertices.push_back(bsp_vertices.size() - 1);
         }
 
-        std::vector<std::array<int, 2>> es;
+        std::vector<std::array<int, 2>> es;//es 边的端点是以idx来存储
         for (auto it = arr.edges_begin(); it != arr.edges_end(); it++) {
             Point_2 &p1 = it->source()->point();
             Point_2 &p2 = it->target()->point();
@@ -179,6 +185,7 @@ void SimpleTetrahedralization::triangulation(std::vector<TetVertex>& tet_vertice
         std::vector<std::array<int, 2>> tmp_es;
         int old_e_size = bsp_faces[i].edges.size();
         for (int j = 0; j < old_e_size; j++) {
+            //上一步中，有target的点落在bsp face的内部或者bsp face的边上的（非顶点），这里插入新的bsp edges
             if (new_v_ids[j].size() == 0)
                 continue;
             std::vector<int> new_es = bsp_edges[bsp_faces[i].edges[j]].vertices;
